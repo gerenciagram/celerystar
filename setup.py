@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 setup(
@@ -11,17 +11,24 @@ setup(
     description='Celery based task framework with dependency injection',
     author=['Pedro Lacerda', 'Tassio Guimarães'],
     author_email='pslacerda+dev@gmail.com',
-    py_modules=['celerystar'],
+    packages=find_packages(),
+    package_data={
+        'celerystar': ['static/*']
+    },
     install_requires=[
-        'apistar',
         'celery>=4.2.0rc2',
         'dataclasses',
+
+        # 'apistar==0.4.3',
+        'coreapi',
+        'jinja2',
+        'pytest',
+        'requests',
+        'werkzeug',
+        'whitenoise'
     ],
     tests_require=[
         'pytest'
-    ],
-    dependency_links=[
-        "git://github.com/encode/apistar.git@level-up#egg=apistar"
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',

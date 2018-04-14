@@ -1,10 +1,12 @@
 
 from unittest.mock import MagicMock, patch
-from pytest import raises
 from contextlib import ExitStack, contextmanager
 from functools import wraps
 
+from pytest import raises
+
 import celerystar as cs
+from celerystar_apistar.test import TestClient
 
 
 @contextmanager
@@ -29,8 +31,24 @@ class CallableImpl:
         return 1
 
 
-base_build_task_patch = patch.object(cs.BaseService, '_build_task',
-                                     create=True)
+class InitialState(cs.Type):
+        state1 = cs.Integer()
+
+
+validation_dict = {
+    'str': cs.String(max_length=2),
+    'obj': cs.Object(properties={
+        'uni': cs.Union(items=[
+            cs.Integer(),
+            cs.Number()
+        ])
+    }),
+    'int': cs.Integer(),
+}
+
+
+make_base_build_task_patch = patch.object(cs.BaseService, '_build_task',
+                                          create=True)
 
 
 def make_resulter_mixin_build_task_patch(func):
@@ -38,6 +56,7 @@ def make_resulter_mixin_build_task_patch(func):
 
     @patch.object(cs.ResulterMixin, 'app', app, create=True)
     @patch.object(cs.ResulterMixin, '_validate_apply_options', create=True)
+    @patch.object(cs.ResulterMixin, 'data_cls', create=True)
     @patch.object(cs.ResulterMixin, 'task', create=True)
     @wraps(func)
     def wrapped(*args, **kwargs):
@@ -86,31 +105,46 @@ def test_base_service_make_options_with_options():
     }
 
 
-@base_build_task_patch
+@make_base_build_task_patch
 def test_base_service_repr(_):
-    srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl, {})
+    srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl,
+                         cs.Type(), {})
     srv._build_task = MagicMock()
     assert repr(srv) == 'Service<name=dummy_impl>'
 
 
-@base_build_task_patch
+@make_base_build_task_patch
 def test_base_service_validate_celery_app(_):
-    cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl, {})
+    srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl,
+                         cs.Type(), {})
     with raises(cs.ConfigurationError, match="cannot handle result backends"):
         app = cs.Celery(backend='redis://')
-        cs.BaseService(app, cs.Injector([], {}), dummy_impl, {})
+        srv = cs.BaseService(app, cs.Injector([], {}), dummy_impl,
+                             cs.Type(), {})
 
 
-@base_build_task_patch
+@make_base_build_task_patch
 def test_base_service_validate_apply_options(_):
     with raises(cs.ConfigurationError, match="only json is supported"):
         cs.BaseService._validate_apply_options({'serializer': 'pickle'})
 
 
-@base_build_task_patch
+# @make_base_build_task_patch
+# def test_base_service_validate_initial_state(_):
+#     app = cs.Celery()
+#     srv = cs.BaseService(app, cs.Injector([], {}), dummy_impl, {}, {
+#         'int': cs.Integer()
+#     })
+#     srv._validate_initial_state({'int': 1})
+#     with raises(cs.ValidationError):
+#         srv._validate_initial_state({'int': 1.1})
+
+
+@make_base_build_task_patch
 def test_base_service_validate(_):
     with patch.object(cs.BaseService, '_validate') as func:
-        cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl, {})
+        srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl,
+                                    cs.Type(), {})
         func.assert_called()
 
     with raises(cs.ConfigurationError,
@@ -118,32 +152,39 @@ def test_base_service_validate(_):
                       ' function "unresolvable".'):
         def unresolvable(param: int):
             return
-        cs.BaseService(cs.Celery(), cs.Injector([], {}), unresolvable, {})
+        srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), unresolvable,
+                             cs.Type(), {})
 
 
-@base_build_task_patch
+@make_base_build_task_patch
 def test_base_service_apply_local(build_task):
     build_task().apply().get.return_value = 2
 
-    srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl, {})
-    initial_state = {'state1': int}
+    srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl,
+                            InitialState, {})
+    initial_state = {'state1': 1}
     apply_opts = {'opt1': 1}
 
     assert srv.apply_local(initial_state, apply_opts) == 2
     srv.task.apply.assert_called_with([initial_state], {}, **apply_opts)
 
 
-@base_build_task_patch
+@make_base_build_task_patch
 def test_base_service_apply_remote(_):
-    srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl, {})
-    initial_state = {'state1': int}
+    srv = cs.BaseService(cs.Celery(), cs.Injector([], {}), dummy_impl,
+                         InitialState, {})
+    srv.task.apply_async = MagicMock()
+    result_id = '3c5faf50-d500-446e-8f25-b0347695c9df'
+    srv.task.apply_async().id = result_id
+
+    initial_state = {'state1': 1}
     apply_opts = {'opt1': 1}
 
-    assert srv.apply_remote(initial_state, apply_opts) is None
+    res = srv.apply_remote(initial_state, apply_opts)
     srv.task.apply_async.assert_called_with([initial_state], {}, **apply_opts)
 
 
-@base_build_task_patch
+@make_base_build_task_patch
 def test_resulter_mixin_validate_celery_app(self):
     app = cs.Celery()
     with patch.object(cs.ResulterMixin, 'app', app, create=True):
@@ -159,7 +200,7 @@ def test_resulter_mixin_validate_celery_app(self):
 
 
 @make_resulter_mixin_build_task_patch
-def test_resulter_mixin_apply_remote(_a, _b):
+def test_resulter_mixin_apply_remote(_a, _b, _c):
     srv = cs.ResulterMixin()
 
     initial_state = {'state1': int}
@@ -174,7 +215,7 @@ def test_resulter_mixin_apply_remote(_a, _b):
 
 
 @make_resulter_mixin_build_task_patch
-def test_resuler_mixin_apply_error(_a, _b):
+def test_resuler_mixin_apply_error(_a, _b, c):
     srv = cs.ResulterMixin()
 
     initial_state = {}
@@ -211,31 +252,112 @@ def test_make_resulter_service():
     app = cs.Celery(backend='redis://')
     injector = cs.Injector([], {})
 
-    srv = cs.make_resulter_service(dummy_impl, injector, app)
+    srv = cs.make_resulter_service(dummy_impl, [], InitialState, app)
     assert isinstance(srv, cs.FunctionResulterService)
 
-    srv = cs.make_resulter_service(ClassImpl, injector, app)
+    srv = cs.make_resulter_service(ClassImpl, [], InitialState, app)
     assert isinstance(srv, cs.ClassResulterService)
 
-    srv = cs.make_resulter_service(CallableImpl(), injector, app)
+    srv = cs.make_resulter_service(CallableImpl(), [], InitialState, app)
     assert isinstance(srv, cs.CallableResulterService)
 
     with raises(cs.ConfigurationError, match="1 could not be handled"):
-        cs.make_resulter_service(1, injector, app)
+        cs.make_resulter_service(1, injector, None, app)
 
 
-def test_make_resulter_service():
+def test_make_service():
     app = cs.Celery()
-    injector = cs.Injector([], {})
 
-    srv = cs.make_service(dummy_impl, injector, app)
+    srv = cs.make_service(dummy_impl, [], InitialState, app)
     assert isinstance(srv, cs.FunctionService)
 
-    srv = cs.make_service(ClassImpl, injector, app)
+    srv = cs.make_service(ClassImpl, [], InitialState, app)
     assert isinstance(srv, cs.ClassService)
 
-    srv = cs.make_service(CallableImpl(), injector, app)
+    srv = cs.make_service(CallableImpl(), [], InitialState, app)
     assert isinstance(srv, cs.CallableService)
 
     with raises(cs.ConfigurationError, match="1 could not be handled"):
-        cs.make_service(1, injector, app)
+        cs.make_service(1, [], InitialState, app)
+
+
+def test_make_injector():
+    class Component(cs.Component):
+        pass
+
+    class InitialState(cs.Type):
+        a_int = cs.Integer()
+        a_obj = cs.Object()
+
+    from celerystar.celerystar import _make_injector
+    _make_injector([Component], InitialState)
+
+
+def test_make_wsgi_app():
+
+    class InitialState(cs.Type):
+        init_int = cs.Integer()
+        init_str = cs.String(allow_null=True)
+
+    class Component1(cs.Component):
+        def resolve(self, state: InitialState) -> float:
+            return float(state['init_int'])
+
+    class Component2(cs.Component):
+        def resolve(self, state: InitialState) -> int:
+            return int(state['init_str'])
+
+    def task1(value: float):
+        "Sample task #1"
+        return value + 0.1
+
+    def task2(value1: float, value2: int):
+        "Sample task #2"
+        return value1 * value2 + 0.1
+
+    app = cs.make_celery_app('test')
+
+    components = [Component1(), Component2()]
+    srv1 = cs.make_service(task1, components, InitialState, app)
+    srv2 = cs.make_service(task2, components, InitialState, app)
+    wsgi_app = cs.make_wsgi_app([srv2, srv1])
+
+    client = TestClient(wsgi_app)
+
+    ret = client.post('/test/task1', json={
+        'apply_opts': {},
+        'result_opts': {},
+        'data': {
+            'init_int': 1,
+            'init_str': None
+        }
+    })
+    assert ret.status_code == 200
+    assert ret.json() == 1.1
+
+    ret = client.post('/test/task2', json={
+        'apply_opts': {},
+        'result_opts': {},
+        'data': {
+            'init_int': 1,
+            'init_str': '2'
+        }
+    })
+    assert ret.status_code == 200
+    assert ret.json() == 2.1
+
+    srv1.task.apply_async = MagicMock()
+    result_id = '3c5faf50-d500-446e-8f25-b0347695c9df'
+
+    srv1.task.apply_async().id = result_id
+    ret = client.post('/test/task1', json={
+        'apply_opts': {},
+        'result_opts': {},
+        'remote': True,
+        'data': {
+            'init_int': 1,
+            'init_str': None
+        }
+    })
+    assert ret.status_code == 200
+    assert ret.json() == result_id
