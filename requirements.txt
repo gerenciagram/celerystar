@@ -1,0 +1,8 @@
+celery>=4.2.0rc2
+dataclasses
+coreapi
+jinja2
+pytest
+requests
+werkzeug
+whitenoise
