@@ -1,4 +1,4 @@
-# CeleryStar
+# CeleryStar [![Build Status](https://travis-ci.org/gerenciagram/celerystar.svg?branch=master)](https://travis-ci.org/gerenciagram/celerystar)
 
 CeleryStar provides APIStar dependency injection mechanism to Celery. It has many benefits:
 
