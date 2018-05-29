@@ -16,16 +16,16 @@ setup(
         'celerystar': ['static/*']
     },
     install_requires=[
-        'celery>=4.2.0rc2',
+        'celery>=4.1.1<5',
         'dataclasses',
 
         # 'apistar==0.4.3',
-        'coreapi',
-        'jinja2',
-        'pytest',
-        'requests',
-        'werkzeug',
-        'whitenoise'
+        'coreapi>=2.3.3<3',
+        'jinja2>=2.10<3',
+        'pytest>=3.6.0<4',
+        'requests>=2.18.4<3',
+        'werkzeug>=0.14.1<1',
+        'whitenoise>=3.3.1<4'
     ],
     tests_require=[
         'pytest'
@@ -34,9 +34,7 @@ setup(
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
-        'Operating System :: Linux',
         'Topic :: System :: Networking',
-         'Natural Language :: English',
         'Programming Language :: Python :: 3.6',
     ],
 )
