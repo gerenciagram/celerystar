@@ -100,6 +100,7 @@ class BaseService:
         self._validate_apply_options(apply_opts)
         result = self.task.apply_async([initial_state], {}, **apply_opts)
         return result.id
+Service = BaseService
 
 
 class ResulterMixin:
@@ -130,7 +131,10 @@ class ResulterMixin:
 class BaseTaskBuilderMixin:
 
     def _make_initial_state(self, data):
-        return {'_hack_': data}
+        return {
+            '_hack_': data,
+            'service': self,
+        }
 
 
 class FunctionTaskBuilderMixin(BaseTaskBuilderMixin):
@@ -190,6 +194,23 @@ class CallableResulterService(CallableTaskBuilderMixin, ResulterMixin,
     """Callable object based Service that handles results."""
 
 
+def _make_injector(components: List[Component],
+                    data_cls: Type) -> Injector:
+    class InitialState(Type):
+        _hack_ = data_cls
+
+    class InitialComponent(Component):
+        def resolve(self, state: InitialState) -> data_cls:
+            return data_cls(state['_hack_'])
+    return Injector(
+        [InitialComponent(), *components],
+        {
+            '_hack_': data_cls,
+            'service': Service,
+        }
+    )
+
+
 def make_resulter_service(impl: Callable, components: List[Component],
                           data_cls, app: Celery,
                           **celery_opts: StrDict) -> BaseService:
@@ -230,19 +251,6 @@ def make_celery_app(name: str, **opts: StrDict) -> Celery:
         accept_content=['json'],
         result_serializer='json',
     )
-
-
-def _make_injector(components: List[Component],
-                   data_cls: Type) -> Injector:
-    class InitialState(Type):
-        _hack_ = data_cls
-
-    class InitialComponent(Component):
-        def resolve(self, state: InitialState) -> data_cls:
-            return data_cls(state['_hack_'])
-
-    return Injector([InitialComponent(), *components],
-                    {'_hack_': data_cls})
 
 
 def _make_view(service: BaseService, post_data_cls: Type) -> Callable:

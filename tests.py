@@ -16,7 +16,7 @@ def nested(*contexts):
 
 
 def dummy_impl():
-        return 1
+    return 1
 
 
 class ClassImpl:
@@ -279,6 +279,18 @@ def test_make_service():
 
     with raises(cs.ConfigurationError, match="1 could not be handled"):
         cs.make_service(1, [], InitialState, app)
+
+
+def test_service_component():
+    class InitialState(cs.Type):
+        pass
+
+    def service_component_impl(service: cs.Service):
+        return service.name
+
+    app = cs.Celery()
+    srv = cs.make_service(service_component_impl, [], InitialState, app, name='a_service')
+    assert srv.apply_local({}, {}) == 'a_service'
 
 
 def test_make_injector():

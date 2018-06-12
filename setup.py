@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='celerystar',
-    version='0.0.1',
+    version='0.0.2',
     url='http://gerenciagram.com.br',
     license='MIT',
     description='Celery based task framework with dependency injection',
